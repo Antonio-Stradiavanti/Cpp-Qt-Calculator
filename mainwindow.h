@@ -4,6 +4,8 @@
 #include <QMainWindow>
 #include <QPushButton>
 
+#include <QFont>
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
@@ -24,11 +26,11 @@ class MainWindow : public QMainWindow {
 
   void on_showTrigAction_toggled(bool arg1);
 
-  void digitsNumbers();
+  void numberPanel();
   void operations();
   // void on_seven_clicked();
-  void mathOperations();
-  void mathFunctions();
+  void mathOperationsPanel();
+  void advancedPanel();
 
   void on_cos_clicked();
 
@@ -46,8 +48,10 @@ private:
   double degToRad();
 
   int fact(int n);
-  void evaluateResult();
+  void evaluateResult(double a, double b);
+  void evaluatePriorityMode();
 
+  void changeNumberPanelAvailability();
 
   // Свойства
   Ui::MainWindow *ui;
@@ -56,7 +60,7 @@ private:
   int appHeight, appWidth, appWidthOneEnabled, appWidthAllEnabled;
   int precision;
 
-  double num_first, num_second;
+  double num_first, num_second, num_third;
 
   QPushButton *it;
 
@@ -64,7 +68,10 @@ private:
   bool isTrigChecked;
   bool isDarkTheme;
   bool isRad;
-  bool isMathOperation, isEvalPressed;
+  bool isMathOperation, isEvalMode, isPriorityMode;
+  bool isNumberPanelEnabled;
+
+  QFont primaryTextFont;
 
   QString mathOperationSign, mathOperationRes;
 

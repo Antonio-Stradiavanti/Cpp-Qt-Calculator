@@ -15,15 +15,19 @@ MainWindow::MainWindow(QWidget *parent)
 
   , num_first{0.0}
   , num_second{0.0}
+  , num_third{1.0}
 
   , isDarkTheme{false}
   , isTrigChecked{false}
   , isAdvancedChecked{false}
   , isRad{false}
   , isMathOperation{false}
-  , isEvalPressed{false}
 
-      , lastPressedArthOps{nullptr}
+      , isEvalMode{false}, isPriorityMode{false}
+
+  , isNumberPanelEnabled{true}
+
+  , lastPressedArthOps{nullptr}
 
   , appHeight{491}
   , appWidth{303}
@@ -62,7 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   for (i = 0; i < ui->mainOperations->layout()->count() - 1; ++i) {
     it = qobject_cast<QPushButton *>(ui->mainOperations->layout()->itemAt(i)->widget());
-    connect(it, &QPushButton::clicked, this, &MainWindow::mathOperations);
+    connect(it, &QPushButton::clicked, this, &MainWindow::mathOperationsPanel);
     it->setStyleSheet(arthOpsStyle);
   }
   for (i = 0; i < ui->controls->count(); ++i) {
@@ -76,9 +80,9 @@ MainWindow::MainWindow(QWidget *parent)
       "QPushButton { background-color: " + evalButtonBackColor + "; color:  "  + evalButtonTextColor + "; }"
       "QPushButton:hover { background-color: "
       + hoveredEvalBackColor + "; color: " + evalButtonTextColor + "}");
-  connect(ui->eval, &QPushButton::clicked, this, &MainWindow::mathOperations);
+  connect(ui->eval, &QPushButton::clicked, this, &MainWindow::mathOperationsPanel);
   // Возведение в степень
-  connect(ui->pow, &QPushButton::clicked, this, &MainWindow::mathOperations);
+  connect(ui->pow, &QPushButton::clicked, this, &MainWindow::mathOperationsPanel);
   // Раскрашиваю кнопки, отобр цифры и изв мат. постоянные
   numsStyle = "QPushButton { background-color: " + displayBackColor
               + " ; color: " + displayTextColor
@@ -87,13 +91,13 @@ MainWindow::MainWindow(QWidget *parent)
               + onDisplayBackColor + " ; }";
   for (i = 0; i < ui->nums->count(); ++i) {
     it = qobject_cast<QPushButton *>(ui->nums->itemAt(i)->widget());
-    connect(it, &QPushButton::clicked, this, &MainWindow::digitsNumbers);
+    connect(it, &QPushButton::clicked, this, &MainWindow::numberPanel);
     it->setStyleSheet(numsStyle);
   }
   ui->pi->setStyleSheet(numsStyle);
-  connect(ui->pi, &QPushButton::clicked, this, &MainWindow::digitsNumbers);
+  connect(ui->pi, &QPushButton::clicked, this, &MainWindow::numberPanel);
   ui->e->setStyleSheet(numsStyle);
-  connect(ui->e, &QPushButton::clicked, this, &MainWindow::digitsNumbers);
+  connect(ui->e, &QPushButton::clicked, this, &MainWindow::numberPanel);
   // Алгебра и тригонометрия
   advancedMathStyle = "QPushButton { background-color: rgb(199, 236, 203); color: rgb(1, 33, "
                       "13); }"
@@ -107,9 +111,14 @@ MainWindow::MainWindow(QWidget *parent)
       it->setStyleSheet(advancedMathStyle);
   }
 
-  connect(ui->log, &QPushButton::clicked, this, &MainWindow::mathFunctions);
-  connect(ui->fact, &QPushButton::clicked, this, &MainWindow::mathFunctions);
-  connect(ui->sqrt, &QPushButton::clicked, this, &MainWindow::mathFunctions);
+  // Настраиваю шрифт
+  primaryTextFont = QFont("Inter", 36);
+  ui->primaryText->setFont(primaryTextFont);
+  // ---
+
+  connect(ui->log, &QPushButton::clicked, this, &MainWindow::advancedPanel);
+  connect(ui->fact, &QPushButton::clicked, this, &MainWindow::advancedPanel);
+  connect(ui->sqrt, &QPushButton::clicked, this, &MainWindow::advancedPanel);
 
   ui->secondaryText->setText("");
 
@@ -195,8 +204,13 @@ void MainWindow::on_showTrigAction_toggled(bool arg1)
     }
 }
 
+void MainWindow::changeNumberPanelAvailability() {
+  for (int i = 1; i < ui->nums->count(); ++i) {
+    qobject_cast<QPushButton*>(ui->nums->itemAt(i)->widget())->setEnabled(isNumberPanelEnabled);
+  }
+}
 
-void MainWindow::digitsNumbers()
+void MainWindow::numberPanel()
 {
   // all_numbers :: введенные числа
   // new_label :: строка, которая отображается на основном дисплее
@@ -205,55 +219,109 @@ void MainWindow::digitsNumbers()
   QString new_label = ui->primaryText->text();
   if (button == ui->del) {
     if (isMathOperation) {
-      ui->del->setText("AC");
+
       if (lastPressedArthOps) {
         lastPressedArthOps->setStyleSheet(arthOpsStyle);
         lastPressedArthOps = nullptr;
       }
-      isMathOperation = false;
-    } else {
-      isEvalPressed = false;
 
+      new_label = QString::number(num_first, 'g', precision);
+
+      ui->del->setText("AC");
+      isMathOperation = false;
+
+    } else {
+      ui->del->setText("AC");
       ui->dot->setEnabled(true);
+
+      primaryTextFont.setPointSize(32);
+      ui->primaryText->setFont(primaryTextFont);
+
       new_label = "0";
+
+      if (!isNumberPanelEnabled) {
+        isNumberPanelEnabled = true;
+        changeNumberPanelAvailability();
+      }
+
     }
+    isEvalMode = false;
     ui->secondaryText->setText("");
+  } else if (button == ui->pi || button == ui->e) {
+    new_label = (button->text() == "e" ? QString::number(M_E, 'g', precision) : QString::number(M_PI, 'g', precision));
+
+    primaryTextFont.setPointSize(28);
+    ui->primaryText->setFont(primaryTextFont);
+
+    if (!isNumberPanelEnabled) {
+      isNumberPanelEnabled = true;
+      changeNumberPanelAvailability();
+    }
+
   } else {
     if (button->text() == ".") {
       new_label = (ui->primaryText->text().contains(".") ? ui->primaryText->text() : ui->primaryText->text() + button->text());
       ui->dot->setEnabled(false);
     } else {
-      new_label = (ui->primaryText->text() == "0" ? button->text() : ui->primaryText->text() + button->text());
+      if (ui->primaryText->text().length() < ( ui->dot->isEnabled() ? 12 : 13 )) {
+        new_label = (ui->primaryText->text() == "0" || ui->primaryText->text() == "π" || ui->primaryText->text() == "e" ? button->text() : ui->primaryText->text() + button->text());
+        if (ui->primaryText->text().length() == 10) {
+          // уменьшаем размер шрифта
+          primaryTextFont.setPointSize(28);
+          ui->primaryText->setFont(primaryTextFont);
+        }
+      } else {
+        isNumberPanelEnabled = true;
+        changeNumberPanelAvailability();
+      }
     }
   }
   ui->primaryText->setText(new_label);
 }
 
-void MainWindow::evaluateResult() {
+void MainWindow::evaluateResult(double a, double b) {
 
   if (mathOperationSign == "+") {
-    mathOperationRes = QString::number(num_first + num_second, 'g', precision);
+    mathOperationRes = QString::number(a + b, 'g', precision);
   } else if (mathOperationSign == "-") {
-    mathOperationRes = QString::number(num_first - num_second, 'g', precision);
+    mathOperationRes = QString::number(a - b, 'g', precision);
   } else if (mathOperationSign == "×") {
-    mathOperationRes = QString::number(num_first * num_second, 'g', precision);
+    mathOperationRes = QString::number(a * b, 'g', precision);
   } else if (mathOperationSign == "/") {
-    if (num_second) {
-      mathOperationRes = QString::number(num_first / num_second, 'g', precision);
+    if (b) {
+      mathOperationRes = QString::number(a / b, 'g', precision);
     } else {
       mathOperationRes = "NaN";
     }
   } else if (mathOperationSign == "^") {
-    mathOperationRes = QString::number(qPow(num_first, num_second), 'g', precision);
+    mathOperationRes = QString::number(qPow(a, b), 'g', precision);
   }
-  ui->primaryText->setText(mathOperationRes);
-  ui->secondaryText->setText(QString::number(num_first) + mathOperationSign + QString::number(num_second, 'g', precision) + " =");
+
 
 }
 
-void MainWindow::mathOperations()
+void MainWindow::evaluatePriorityMode() {
+
+  QString tmpSign = mathOperationSign;
+  mathOperationSign = lastPressedArthOps->text();
+
+  evaluateResult(num_second, ui->primaryText->text().toDouble());
+
+  mathOperationSign = tmpSign;
+
+  evaluateResult(num_first, mathOperationRes.toDouble());
+
+  num_first = mathOperationRes.toDouble();
+
+  lastPressedArthOps->setStyleSheet(arthOpsStyle);
+  lastPressedArthOps = nullptr;
+  isPriorityMode = false;
+
+}
+
+void MainWindow::mathOperationsPanel()
 {
-  QPushButton *button = (QPushButton *)sender();
+  QPushButton* button = (QPushButton *)sender();
 
   // ---
   // Если у нас выбрана хотябы одна из операций, то мы при нажатии на eval ее выполняем, иначе не делаем ничего.
@@ -261,42 +329,79 @@ void MainWindow::mathOperations()
   // При повторном нажатии на знак "=" в левым операндом должен стать результат операции.
   // Мат Операция должна заканчиваться только в случае если либо нажата "DEL", либо введено обычное число.
   if (isMathOperation) {
-    if (isEvalPressed) {
+    // Повторное нажатие на знак математической операции
+    // Низкий приоритет
+    isEvalMode = (button->text() == mathOperationSign ? true : false);
 
-      if (button == ui->eval) {
-        num_first = ui->primaryText->text().toDouble();
-        evaluateResult();
+    if (button == ui->plus || button == ui->minus ) {
 
-      } else if (button == ui->plus || button == ui->minus || button == ui->mult || button == ui->div || button == ui->pow) {
-        isEvalPressed = false;
-        num_first = mathOperationRes.toDouble();
+      if (isEvalMode) {
 
+        goto toEval;
+      // Нажата эта кнопка и до этого было введено выражение с приоритетом мат операций.
+      } else if (isPriorityMode) {
+
+        //num_second = ui->primaryText->text().toDouble();
+        evaluatePriorityMode();
         mathOperationSign = button->text();
 
+        ui->secondaryText->setText(mathOperationRes + " " + mathOperationSign + " ");
         ui->primaryText->setText("0");
-        ui->secondaryText->setText(QString::number(num_first, 'g', precision) + " " + mathOperationSign + " ");
+      // Поменяли минус на плюс например.
+      } else {
+        mathOperationSign = button->text();
+        ui->primaryText->setText("0");
+        ui->secondaryText->setText(mathOperationRes + " " + mathOperationSign + " ");
+
+        num_first = mathOperationRes.toDouble();
 
       }
 
-    } else {
-      if (button == ui->plus || button == ui->minus || button == ui->mult || button == ui->div || button == ui->pow) {
-        num_second = ui->primaryText->text().toDouble();
+    // Высокий приоритет
+    } else if (button == ui->mult || button == ui->div || button == ui->pow) {
+
+      if (isEvalMode) {
+
+        goto toEval;
+      // Если выбрал деление или деление с остатком и до этого было введено выражение с приоритетом операций
+      } else if (isPriorityMode) {
+
+        //num_second = ui->primaryText->text().toDouble();
+        evaluatePriorityMode();
         mathOperationSign = button->text();
 
-        evaluateResult();
+        ui->secondaryText->setText(mathOperationRes + " " + mathOperationSign + " ");
+        ui->primaryText->setText("0");
 
-        isMathOperation = true;
-        ui->del->setText("C");
+      } else {
+
         button->setStyleSheet(pressedArthOpsStyle);
         lastPressedArthOps = button;
 
-      } else if (button == ui->eval) {
         num_second = ui->primaryText->text().toDouble();
-        evaluateResult();
+        ui->secondaryText->setText(QString::number(num_first, 'g', precision) + " " + mathOperationSign + " " + ui->primaryText->text() + " " + button->text());
+        ui->primaryText->setText("0");
 
-        isEvalPressed = true;
+        isPriorityMode = true;
       }
+
+    } else if (button == ui->eval) {
+      toEval:
+      num_second = ui->primaryText->text().toDouble();
+      if (isPriorityMode) {
+        evaluatePriorityMode();
+        ui->secondaryText->setText(ui->secondaryText->text() + " " + ui->primaryText->text() +  " =");
+      } else {
+        evaluateResult(num_first, num_second);
+        ui->secondaryText->setText(QString::number(num_first) + mathOperationSign + ui->primaryText->text() + " =");
+        num_first = mathOperationRes.toDouble();
+      }
+
+      ui->primaryText->setText(mathOperationRes);
+      isMathOperation = false;
+
     }
+    // Первое нажатие на знак математической операции
   } else {
 
     if (ui->primaryText->text() == "π") {
@@ -313,12 +418,19 @@ void MainWindow::mathOperations()
       mathOperationSign = button->text();
 
       ui->primaryText->setText("0");
+
       ui->secondaryText->setText(QString::number(num_first, 'g', precision) + " " + mathOperationSign + " ");
 
+      ui->del->setText("C");
       isMathOperation = true;
 
     } else if (button == ui->eval) { // Оставляет тоже число на дисплее.
       ui->primaryText->setText(QString::number(num_first, 'g', precision));
+    }
+
+    if (!isNumberPanelEnabled) {
+        isNumberPanelEnabled = true;
+        changeNumberPanelAvailability();
     }
 
   }
@@ -331,7 +443,7 @@ int MainWindow::fact(int n) {
     return n*fact(n-1);
 }
 
-void MainWindow::mathFunctions() {
+void MainWindow::advancedPanel() {
   QPushButton *button = (QPushButton *)sender();
   if (button == ui->sqrt) {
     mathOperationRes = QString::number(qSqrt(ui->primaryText->text().toDouble()), 'g', precision);
@@ -436,6 +548,3 @@ void MainWindow::on_ctg_clicked()
   num_first = 0;
 }
 
-// void MainWindow::on_del_clicked() {
-
-// }
