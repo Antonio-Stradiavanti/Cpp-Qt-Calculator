@@ -104,6 +104,7 @@ MainWindow::MainWindow(QWidget *parent)
                       "QPushButton:hover { background-color: rgb(171, 207, 176); }";
   for (i = 0; i < ui->trigonometry->layout()->count() - 1; ++i) {
       it = qobject_cast<QPushButton *>(ui->trigonometry->layout()->itemAt(i)->widget());
+      connect(it, &QPushButton::clicked, this, &MainWindow::trigPanel);
       it->setStyleSheet(advancedMathStyle);
   }
   for (i = 1; i < ui->alg->layout()->count() - 1; ++i) {
@@ -279,21 +280,21 @@ void MainWindow::numberPanel()
   ui->primaryText->setText(new_label);
 }
 
-void MainWindow::evaluateResult(double a, double b) {
+void MainWindow::evaluateResult(double a, double b, QString sign) {
 
-  if (mathOperationSign == "+") {
+  if (sign == "+") {
     mathOperationRes = QString::number(a + b, 'g', precision);
-  } else if (mathOperationSign == "-") {
+  } else if (sign == "-") {
     mathOperationRes = QString::number(a - b, 'g', precision);
-  } else if (mathOperationSign == "×") {
+  } else if (sign == "×") {
     mathOperationRes = QString::number(a * b, 'g', precision);
-  } else if (mathOperationSign == "/") {
+  } else if (sign == "/") {
     if (b) {
       mathOperationRes = QString::number(a / b, 'g', precision);
     } else {
-      mathOperationRes = "NaN";
+      mathOperationRes = "nan";
     }
-  } else if (mathOperationSign == "^") {
+  } else if (sign == "^") {
     mathOperationRes = QString::number(qPow(a, b), 'g', precision);
   }
 
@@ -302,20 +303,41 @@ void MainWindow::evaluateResult(double a, double b) {
 
 void MainWindow::evaluatePriorityMode() {
 
-  QString tmpSign = mathOperationSign;
-  mathOperationSign = lastPressedArthOps->text();
+  if (
+    (mathOperationSign == "/" && lastPressedArthOps->text() == "×") ||
+    (mathOperationSign == "×" && lastPressedArthOps->text() == "/")
+  )
+  {
+    evaluateResult(num_first, num_second, mathOperationSign);
+    evaluateResult(mathOperationRes.toDouble(), ui->primaryText->text().toDouble(), lastPressedArthOps->text());
 
-  evaluateResult(num_second, ui->primaryText->text().toDouble());
+  } else {
+    evaluateResult(num_second, ui->primaryText->text().toDouble(), lastPressedArthOps->text());
+    evaluateResult(num_first, mathOperationRes.toDouble(), mathOperationSign);
+  }
 
-  mathOperationSign = tmpSign;
-
-  evaluateResult(num_first, mathOperationRes.toDouble());
-
-  num_first = mathOperationRes.toDouble();
 
   lastPressedArthOps->setStyleSheet(arthOpsStyle);
   lastPressedArthOps = nullptr;
   isPriorityMode = false;
+
+}
+
+void MainWindow::evalMe() {
+
+  if (isPriorityMode) {
+    evaluatePriorityMode();
+    num_first = mathOperationRes.toDouble();
+    ui->secondaryText->setText(ui->secondaryText->text() + " " + ui->primaryText->text() +  " =");
+  } else {
+    num_second = ui->primaryText->text().toDouble();
+    evaluateResult(num_first, num_second, mathOperationSign);
+    ui->secondaryText->setText(QString::number(num_first) + mathOperationSign + ui->primaryText->text() + " =");
+    num_first = mathOperationRes.toDouble();
+  }
+
+  ui->primaryText->setText(mathOperationRes);
+  isMathOperation = false;
 
 }
 
@@ -337,12 +359,13 @@ void MainWindow::mathOperationsPanel()
 
       if (isEvalMode) {
 
-        goto toEval;
+        evalMe();
       // Нажата эта кнопка и до этого было введено выражение с приоритетом мат операций.
       } else if (isPriorityMode) {
 
         //num_second = ui->primaryText->text().toDouble();
         evaluatePriorityMode();
+        num_first = mathOperationRes.toDouble();
         mathOperationSign = button->text();
 
         ui->secondaryText->setText(mathOperationRes + " " + mathOperationSign + " ");
@@ -362,17 +385,17 @@ void MainWindow::mathOperationsPanel()
 
       if (isEvalMode) {
 
-        goto toEval;
-      // Если выбрал деление или деление с остатком и до этого было введено выражение с приоритетом операций
+        evalMe();
+
+      // Если выбрал деление и до этого было умножение
       } else if (isPriorityMode) {
 
-        //num_second = ui->primaryText->text().toDouble();
         evaluatePriorityMode();
         mathOperationSign = button->text();
 
         ui->secondaryText->setText(mathOperationRes + " " + mathOperationSign + " ");
         ui->primaryText->setText("0");
-
+      // До этого было сложение или вычитание
       } else {
 
         button->setStyleSheet(pressedArthOpsStyle);
@@ -386,19 +409,8 @@ void MainWindow::mathOperationsPanel()
       }
 
     } else if (button == ui->eval) {
-      toEval:
-      num_second = ui->primaryText->text().toDouble();
-      if (isPriorityMode) {
-        evaluatePriorityMode();
-        ui->secondaryText->setText(ui->secondaryText->text() + " " + ui->primaryText->text() +  " =");
-      } else {
-        evaluateResult(num_first, num_second);
-        ui->secondaryText->setText(QString::number(num_first) + mathOperationSign + ui->primaryText->text() + " =");
-        num_first = mathOperationRes.toDouble();
-      }
 
-      ui->primaryText->setText(mathOperationRes);
-      isMathOperation = false;
+      evalMe();
 
     }
     // Первое нажатие на знак математической операции
@@ -445,28 +457,43 @@ int MainWindow::fact(int n) {
 
 void MainWindow::advancedPanel() {
   QPushButton *button = (QPushButton *)sender();
-  if (button == ui->sqrt) {
-    mathOperationRes = QString::number(qSqrt(ui->primaryText->text().toDouble()), 'g', precision);
-    ui->secondaryText->setText("sqrt(" + ui->primaryText->text() + ") =");
-  } else if (button == ui->fact) {
-    mathOperationRes = QString::number(fact(ui->primaryText->text().toInt()));
-    ui->secondaryText->setText(ui->primaryText->text() + "! =");
-  } else if (button == ui->log) {
-    num_first = ui->primaryText->text().toDouble();
-    if (num_first > 0) {
-      mathOperationRes = QString::number(qLn(num_first));
-    } else {
-      mathOperationRes = "NaN";
-    }
-    ui->secondaryText->setText("ln("+ ui->primaryText->text() + ") =");
+
+  if (isMathOperation) {
+    evalMe();
+  } else {
+    mathOperationRes = ui->primaryText->text();
+    num_first = mathOperationRes.toDouble();
   }
-  ui->primaryText->setText(mathOperationRes);
+
+  double res;
+
+  if (button == ui->sqrt) {
+
+    res = qSqrt(num_first);
+    ui->secondaryText->setText("sqrt(" + mathOperationRes + ") =");
+
+  } else if (button == ui->fact) {
+
+    res = fact(num_first);
+    ui->secondaryText->setText(mathOperationRes + "! =");
+
+  } else if (button == ui->log) {
+
+    res = qLn(num_first);
+    ui->secondaryText->setText("ln("+ ui->primaryText->text() + ") =");
+
+  }
+
+  ui->primaryText->setText(QString::number(res, 'g', precision));
+
 }
 
 void MainWindow::operations()
 {
-  QPushButton *button = (QPushButton *)sender();
+  QPushButton* button = (QPushButton*)sender();
+
   double all_numbers;
+
   if(button == ui->changeSign) {
     all_numbers = (ui->primaryText->text().toDouble());
     all_numbers = all_numbers * -1;
@@ -492,59 +519,47 @@ void MainWindow::operations()
 }
 
 double MainWindow::degToRad() {
-  num_first = ui->primaryText->text().toDouble();
   return (isRad ? num_first : qDegreesToRadians(num_first));
 }
 
-void MainWindow::on_cos_clicked()
-{
-  ui->cos->setChecked(true);
-    // Вычислите косинус в градусах
-    double labelNumber = qCos(degToRad());
-    QString new_label = QString::number(labelNumber, 'g', precision);
-    ui->primaryText->setText(new_label); // Вывод результата косинуса
-    ui->cos->setChecked(false);
-    // Сброс значения num_first после вычисления косинуса
-    num_first = 0;
+void MainWindow::trigPanel() {
+  QPushButton* button = (QPushButton*)sender();
+
+  if (isMathOperation) {
+    evalMe();
+  } else {
+    mathOperationRes = ui->primaryText->text();
+    num_first = ui->primaryText->text().toDouble();
+  }
+  double res = 0.0; QString funcSign;
+
+  if (button == ui->sin) {
+
+    res = qSin(degToRad());
+    funcSign = "sin(";
+
+  } else if (button == ui->cos) {
+
+    res = qCos(degToRad());
+    funcSign = "cos(";
+
+  } else if (button == ui->tg) {
+
+    res = qTan(degToRad());
+    funcSign = "tg(";
+
+  } else if (button == ui->ctg) {
+
+    res = 1.0 / qTan(degToRad());
+    funcSign = "ctg(";
+
+  }
+
+  num_first = res;
+  ui->secondaryText->setText(funcSign + mathOperationRes + ") =");
+  ui->primaryText->setText(
+    (res > qPow(10, -10) ? QString::number(res, 'g', precision) : "0")
+  );
 }
 
-void MainWindow::on_sin_clicked()
-{
-  ui->sin->setChecked(true);
-  // Вычислите синус в градусах
-  double labelNumber = qSin(degToRad());
-  QString new_label = QString::number(labelNumber, 'g', precision);
-  ui->primaryText->setText(new_label); // Вывод результата синуса
-  ui->sin->setChecked(false);
-
-  // Сброс значения num_first после вычисления синуса
-  num_first = 0;
-}
-
-
-void MainWindow::on_tg_clicked()
-{
-  ui->tg->setChecked(true);
-  // Вычислите тангенс в градусах
-  double labelNumber = qTan(degToRad());
-  QString new_label = QString::number(labelNumber, 'g', precision);
-  ui->primaryText->setText(new_label); // Вывод результата тангенса
-  ui->tg->setChecked(false);
-
-  // Сброс значения num_first после вычисления тангенса
-  num_first = 0;
-}
-
-
-void MainWindow::on_ctg_clicked()
-{
-  // Вычислите котангенс в градусах
-  double labelNumber = 1.0 / qTan(degToRad());
-  QString new_label = QString::number(labelNumber, 'g', precision);
-  ui->primaryText->setText(new_label); // Вывод результата котангенса
-  ui->ctg->setChecked(false);
-
-  // Сброс значения num_first после вычисления котангенса
-  num_first = 0;
-}
 

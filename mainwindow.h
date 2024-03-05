@@ -31,16 +31,7 @@ class MainWindow : public QMainWindow {
   // void on_seven_clicked();
   void mathOperationsPanel();
   void advancedPanel();
-
-  void on_cos_clicked();
-
-  void on_sin_clicked();
-
-  void on_tg_clicked();
-
-  void on_ctg_clicked();
-
-  // void on_del_clicked();
+  void trigPanel();
 
 private:
   // Методы
@@ -48,8 +39,10 @@ private:
   double degToRad();
 
   int fact(int n);
-  void evaluateResult(double a, double b);
+
+  void evaluateResult(double a, double b, QString sign);
   void evaluatePriorityMode();
+  void evalMe();
 
   void changeNumberPanelAvailability();
 
